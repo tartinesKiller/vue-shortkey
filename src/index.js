@@ -32,15 +32,10 @@ const bindValue = (value, el, binding, vnode) => {
 }
 
 const unbindValue = (value, el, vnode) => {
-  const elKey = vnode.key;
+  const elKey = vnode.context._uid;
   for (let key in value) {
     const k = ShortKey.encodeKey(value[key])
-    if (key === undefined) {
-      const idxElm = mapFunctions[k].el["undefined"].indexOf(el)
-      mapFunctions[k].el.splice(idxElm, 1)
-    } else {
-      delete mapFunctions[k].el[elKey]
-    }
+    delete mapFunctions[k].el[elKey]
   }
 }
 
@@ -117,11 +112,7 @@ const dispatchShortkeyEvent = (pKey, elKey) => {
   const e = new CustomEvent('shortkey', { bubbles: false })
   if (mapFunctions[pKey].key) e.srcKey = mapFunctions[pKey].key
   const elm = mapFunctions[pKey].el
-  if (elKey === undefined) {
-    elm["undefined"][elm.length - 1].dispatchEvent(e)
-  } else {
-    elm[elKey].dispatchEvent(e);
-  }
+  elm[elKey].dispatchEvent(e);
 }
 
 ShortKey.keyDown = (pKey, elKey) => {
@@ -168,8 +159,6 @@ if (process && process.env && process.env.NODE_ENV !== 'test') {
 }
 
 const findParentWithShortkey = (baseEl) => {
-  // eslint-disable-next-line no-debugger
-  debugger;
   if (baseEl.__vue__ && baseEl.__vue__._havevshortkey) {
     return baseEl;
   } else if (baseEl.parentElement) {
