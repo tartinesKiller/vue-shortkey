@@ -20,24 +20,26 @@ const bindValue = (value, el, binding, vnode) => {
   const avoid = binding.modifiers.avoid === true
   const focus = !binding.modifiers.focus === true
   const once = binding.modifiers.once === true
+  const elKey = vnode.context._uid;
   if (avoid) {
     objAvoided = objAvoided.filter((itm) => {
       return !itm === el;
     })
     objAvoided.push(el)
   } else {
-    mappingFunctions({b: value, push, once, focus, el: vnode.elm})
+    mappingFunctions({b: value, push, once, focus, el: vnode.elm, elKey: elKey})
   }
 }
 
-const unbindValue = (value, el) => {
+const unbindValue = (value, el, vnode) => {
+  const elKey = vnode.key;
   for (let key in value) {
     const k = ShortKey.encodeKey(value[key])
-    const idxElm = mapFunctions[k].el.indexOf(el)
-    if (mapFunctions[k].el.length > 1 && idxElm > -1) {
+    if (key === undefined) {
+      const idxElm = mapFunctions[k].el["undefined"].indexOf(el)
       mapFunctions[k].el.splice(idxElm, 1)
     } else {
-      delete mapFunctions[k]
+      delete mapFunctions[k].el[elKey]
     }
   }
 }
@@ -49,17 +51,18 @@ ShortKey.install = (Vue, options) => {
       // Mapping the commands
       const value = parseValue(binding.value)
       bindValue(value, el, binding, vnode)
+      vnode.context._havevshortkey = true;
     },
     update: (el, binding, vnode) => {
       const oldValue = parseValue(binding.oldValue)
-      unbindValue(oldValue, el)
+      unbindValue(oldValue, el, vnode)
 
       const newValue = parseValue(binding.value)
       bindValue(newValue, el, binding, vnode)
     },
-    unbind: (el, binding) => {
+    unbind: (el, binding, vnode) => {
       const value = parseValue(binding.value)
-      unbindValue(value, el)
+      unbindValue(value, el, vnode)
     }
   })
 }
@@ -110,16 +113,20 @@ const createShortcutIndex = (pKey) => {
   return k
 }
 
-const dispatchShortkeyEvent = (pKey) => {
+const dispatchShortkeyEvent = (pKey, elKey) => {
   const e = new CustomEvent('shortkey', { bubbles: false })
   if (mapFunctions[pKey].key) e.srcKey = mapFunctions[pKey].key
   const elm = mapFunctions[pKey].el
-  elm[elm.length - 1].dispatchEvent(e)
+  if (elKey === undefined) {
+    elm["undefined"][elm.length - 1].dispatchEvent(e)
+  } else {
+    elm[elKey].dispatchEvent(e);
+  }
 }
 
-ShortKey.keyDown = (pKey) => {
+ShortKey.keyDown = (pKey, elKey) => {
   if ((!mapFunctions[pKey].once && !mapFunctions[pKey].push) || (mapFunctions[pKey].push && !keyPressed)) {
-    dispatchShortkeyEvent(pKey)
+    dispatchShortkeyEvent(pKey, elKey)
   }
 }
 
@@ -131,12 +138,16 @@ if (process && process.env && process.env.NODE_ENV !== 'test') {
       if (availableElement(decodedKey)) {
         pKey.preventDefault()
         pKey.stopPropagation()
+        const elWithKey = findParentWithShortkey(pKey.target);
+        const elKey = elWithKey.__vue__._vnode.context._uid;
         if (mapFunctions[decodedKey].focus) {
-          ShortKey.keyDown(decodedKey)
+          ShortKey.keyDown(decodedKey, elKey);
           keyPressed = true
         } else if (!keyPressed) {
-          const elm = mapFunctions[decodedKey].el
-          elm[elm.length - 1].focus()
+          let el;
+          const elms = mapFunctions[decodedKey].el
+          el = elms[elms.length - 1];
+          el.focus()
           keyPressed = true
         }
       }
@@ -156,11 +167,23 @@ if (process && process.env && process.env.NODE_ENV !== 'test') {
   })()
 }
 
-const mappingFunctions = ({b, push, once, focus, el}) => {
+const findParentWithShortkey = (baseEl) => {
+  // eslint-disable-next-line no-debugger
+  debugger;
+  if (baseEl.__vue__ && baseEl.__vue__._havevshortkey) {
+    return baseEl;
+  } else if (baseEl.parentElement) {
+    return findParentWithShortkey(baseEl.parentElement);
+  } else {
+    return null;
+  }
+}
+
+const mappingFunctions = ({b, push, once, focus, el, elKey}) => {
   for (let key in b) {
     const k = ShortKey.encodeKey(b[key])
-    const elm = mapFunctions[k] && mapFunctions[k].el ? mapFunctions[k].el : []
-    elm.push(el)
+    const elm = mapFunctions[k] && mapFunctions[k].el ? mapFunctions[k].el : {}
+    elm[elKey] = el
     mapFunctions[k] = {
       push,
       once,
@@ -177,10 +200,12 @@ const availableElement = (decodedKey) => {
   return !!mapFunctions[decodedKey] && !(objectIsAvoided || filterAvoided)
 }
 
-if (typeof module != 'undefined' && module.exports) {
-  module.exports = ShortKey;
-} else if (typeof define == 'function' && define.amd) {
-  define( function () { return ShortKey; } );
-} else {
-  window.ShortKey = ShortKey;
-}
+export default ShortKey;
+
+// if (typeof module != 'undefined' && module.exports) {
+//   module.exports = ShortKey;
+// } else if (typeof define == 'function' && define.amd) {
+//   define( function () { return ShortKey; } );
+// } else {
+//   window.ShortKey = ShortKey;
+// }
