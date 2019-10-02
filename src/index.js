@@ -20,7 +20,8 @@ const bindValue = (value, el, binding, vnode) => {
   const avoid = binding.modifiers.avoid === true
   const focus = !binding.modifiers.focus === true
   const once = binding.modifiers.once === true
-  const elKey = vnode.context._uid;
+  const global = binding.modifiers.global === true;
+  const elKey = global ? "global" : vnode.context._uid;
   if (avoid) {
     objAvoided = objAvoided.filter((itm) => {
       return !itm === el;
@@ -125,19 +126,29 @@ if (process && process.env && process.env.NODE_ENV !== 'test') {
   ;(function () {
     document.addEventListener('keydown', (pKey) => {
       const decodedKey = ShortKey.decodeKey(pKey)
+      const elts = mapFunctions[decodedKey]
       // Check avoidable elements
       if (availableElement(decodedKey)) {
         pKey.preventDefault()
         pKey.stopPropagation()
-        const elWithKey = findParentWithShortkey(pKey.target);
-        const elKey = elWithKey.__vue__._vnode.context._uid;
+        const elWithKey = findParentWithShortkey(decodedKey, pKey.target);
+        let elKey;
+        if (!elWithKey) {
+          if (elts.el["global"]) {
+            elKey = "global";
+          } else {
+            elKey = "body";
+          }
+        } else {
+          elKey = elWithKey.__vue__._vnode.context._uid;
+        }
         if (mapFunctions[decodedKey].focus) {
           ShortKey.keyDown(decodedKey, elKey);
           keyPressed = true
         } else if (!keyPressed) {
           let el;
           const elms = mapFunctions[decodedKey].el
-          el = elms[elms.length - 1];
+          el = elms[elKey];
           el.focus()
           keyPressed = true
         }
@@ -158,11 +169,11 @@ if (process && process.env && process.env.NODE_ENV !== 'test') {
   })()
 }
 
-const findParentWithShortkey = (baseEl) => {
-  if (baseEl.__vue__ && baseEl.__vue__._havevshortkey) {
+const findParentWithShortkey = (shortkey, baseEl) => {
+  if (baseEl.__vue__ && baseEl.__vue__._havevshortkey && mapFunctions[shortkey].el[baseEl.__vue__._uid]) {
     return baseEl;
   } else if (baseEl.parentElement) {
-    return findParentWithShortkey(baseEl.parentElement);
+    return findParentWithShortkey(shortkey, baseEl.parentElement);
   } else {
     return null;
   }
@@ -171,14 +182,15 @@ const findParentWithShortkey = (baseEl) => {
 const mappingFunctions = ({b, push, once, focus, el, elKey}) => {
   for (let key in b) {
     const k = ShortKey.encodeKey(b[key])
-    const elm = mapFunctions[k] && mapFunctions[k].el ? mapFunctions[k].el : {}
+    const elm = mapFunctions[k] && mapFunctions[k].el ? mapFunctions[k].el : {"body":document.body}
     elm[elKey] = el
     mapFunctions[k] = {
       push,
       once,
       focus,
       key,
-      el: elm
+      el: elm,
+      global: elKey === "global"
     }
   }
 }
